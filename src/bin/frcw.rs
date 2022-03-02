@@ -108,6 +108,10 @@ fn main() {
                 .help("Region columns with weights for region-aware ReCom."),
         )
         .arg(Arg::with_name("cut_edges_count").long("cut-edges-count"));
+
+    let stdout = std::io::stdout();
+    let mut writerbuf = std::io::BufWriter::with_capacity(usize::pow(2, 24), stdout.lock());
+
     if cfg!(feature = "linalg") {
         cli = cli.arg(Arg::with_name("spanning_tree_counts").long("st-counts"));
     }
@@ -148,9 +152,9 @@ fn main() {
     };
     let writer: Box<dyn StatsWriter> = match writer_str {
         "tsv" => Box::new(TSVWriter::new()),
-        "jsonl" => Box::new(JSONLWriter::new(false, st_counts, cut_edges_count)),
+        "jsonl" => Box::new(JSONLWriter::new(&mut writerbuf, false, st_counts, cut_edges_count)),
         "pcompress" => Box::new(PcompressWriter::new()),
-        "jsonl-full" => Box::new(JSONLWriter::new(true, st_counts, cut_edges_count)),
+        "jsonl-full" => Box::new(JSONLWriter::new(&mut writerbuf, true, st_counts, cut_edges_count)),
         bad => panic!("Parameter error: invalid writer '{}'", bad),
     };
     if variant == RecomVariant::Reversible && balance_ub == 0 {

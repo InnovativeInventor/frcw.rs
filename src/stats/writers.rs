@@ -61,7 +61,9 @@ pub struct PcompressWriter {
 }
 
 /// Writes statistics in JSONL (JSON Lines) format.
-pub struct JSONLWriter {
+pub struct JSONLWriter<'a, W: std::io::Write> {
+    /// A buffered writer wrapping stdout
+    writer: &'a mut BufWriter<W>,
     /// Determines whether node deltas should be saved for each step.
     nodes: bool,
     /// Determines whether to compute spanning tree counts for each step.
@@ -82,9 +84,10 @@ impl AssignmentsOnlyWriter {
     }
 }
 
-impl JSONLWriter {
-    pub fn new(nodes: bool, spanning_tree_counts: bool, cut_edges_count: bool) -> JSONLWriter {
+impl<W: std::io::Write> JSONLWriter<'_, W> {
+    pub fn new(mut writer: &mut std::io::BufWriter<W>, nodes: bool, spanning_tree_counts: bool, cut_edges_count: bool) -> JSONLWriter<W> {
         JSONLWriter {
+            writer: writer,
             nodes: nodes,
             spanning_tree_counts: spanning_tree_counts,
             cut_edges_count: cut_edges_count,
@@ -162,7 +165,7 @@ impl StatsWriter for TSVWriter {
     }
 }
 
-impl StatsWriter for JSONLWriter {
+impl<W: std::io::Write + std::marker::Send> StatsWriter for JSONLWriter<'_, W> {
     fn init(&mut self, graph: &Graph, partition: &Partition) -> Result<()> {
         // TSV column header.
         let mut stats = json!({
@@ -171,7 +174,7 @@ impl StatsWriter for JSONLWriter {
             "sums": partition_sums(graph, partition)
         });
         if self.spanning_tree_counts {
-            JSONLWriter::init_spanning_tree_counts(graph, partition, &mut stats);
+            JSONLWriter::<W>::init_spanning_tree_counts(graph, partition, &mut stats);
         }
         if self.cut_edges_count {
             let mut partition = partition.clone();
@@ -181,7 +184,8 @@ impl StatsWriter for JSONLWriter {
                 to_value(cut_edges_count).unwrap(),
             );
         }
-        println!("{}", json!({ "init": stats }).to_string());
+        serde_json::to_writer(&mut self.writer, &json!({"init": stats}));
+        // println!("{}", json!({ "init": stats }).to_string());
         Ok(())
     }
 
@@ -207,7 +211,7 @@ impl StatsWriter for JSONLWriter {
             );
         }
         if self.spanning_tree_counts {
-            JSONLWriter::step_spanning_tree_counts(graph, proposal, &mut step);
+            JSONLWriter::<W>::step_spanning_tree_counts(graph, proposal, &mut step);
         }
         if self.cut_edges_count {
             let mut partition = partition.clone();
@@ -217,7 +221,8 @@ impl StatsWriter for JSONLWriter {
                 to_value(cut_edges_count).unwrap(),
             );
         }
-        println!("{}", json!({ "step": step }).to_string());
+        serde_json::to_writer(&mut self.writer, &json!({"step": step}));
+        // println!("{}", json!({ "step": step }).to_string());
         Ok(())
     }
 
