@@ -115,6 +115,5 @@ fn main() {
         variant: RecomVariant::Reversible,
         region_weights: None,
     };
-    let writer: Box<dyn StatsWriter> = Box::new(AssignmentsOnlyWriter::new());
-    multi_chain(&graph, &partition, writer, &params, n_threads, batch_size);
+    multi_chain(&graph, &partition, "assignments-only", &params, n_threads, batch_size, false, false);
 }

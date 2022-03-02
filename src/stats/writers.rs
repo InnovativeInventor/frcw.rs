@@ -12,7 +12,7 @@ use std::io::{stdout, BufWriter, Result, Stdout, Write};
 /// A standard interface for writing steps and statistics to stdout.
 /// TODO: allow direct output to a file (e.g. in Parquet format).
 /// TODO: move outside of this module.
-pub trait StatsWriter: Send {
+pub trait StatsWriter {
     /// Prints data from the initial partition.
     fn init(&mut self, graph: &Graph, partition: &Partition) -> Result<()>;
 
@@ -165,7 +165,7 @@ impl StatsWriter for TSVWriter {
     }
 }
 
-impl<W: std::io::Write + std::marker::Send> StatsWriter for JSONLWriter<'_, W> {
+impl<W: std::io::Write> StatsWriter for JSONLWriter<'_, W> {
     fn init(&mut self, graph: &Graph, partition: &Partition) -> Result<()> {
         // TSV column header.
         let mut stats = json!({

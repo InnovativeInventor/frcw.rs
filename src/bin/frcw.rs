@@ -8,7 +8,6 @@ use frcw::config::parse_region_weights_config;
 use frcw::init::from_networkx;
 use frcw::recom::run::multi_chain;
 use frcw::recom::{RecomParams, RecomVariant};
-use frcw::stats::{JSONLWriter, PcompressWriter, StatsWriter, TSVWriter};
 use serde_json::json;
 use sha3::{Digest, Sha3_256};
 use std::path::PathBuf;
@@ -110,7 +109,6 @@ fn main() {
         .arg(Arg::with_name("cut_edges_count").long("cut-edges-count"));
 
     let stdout = std::io::stdout();
-    let mut writerbuf = std::io::BufWriter::with_capacity(usize::pow(2, 24), stdout.lock());
 
     if cfg!(feature = "linalg") {
         cli = cli.arg(Arg::with_name("spanning_tree_counts").long("st-counts"));
@@ -150,13 +148,7 @@ fn main() {
         "district-pairs-region-aware" => RecomVariant::DistrictPairsRegionAware,
         bad => panic!("Parameter error: invalid variant '{}'", bad),
     };
-    let writer: Box<dyn StatsWriter> = match writer_str {
-        "tsv" => Box::new(TSVWriter::new()),
-        "jsonl" => Box::new(JSONLWriter::new(&mut writerbuf, false, st_counts, cut_edges_count)),
-        "pcompress" => Box::new(PcompressWriter::new()),
-        "jsonl-full" => Box::new(JSONLWriter::new(&mut writerbuf, true, st_counts, cut_edges_count)),
-        bad => panic!("Parameter error: invalid writer '{}'", bad),
-    };
+
     if variant == RecomVariant::Reversible && balance_ub == 0 {
         panic!("For reversible ReCom, specify M > 0.");
     }
@@ -206,5 +198,5 @@ fn main() {
             .insert("region_weights".to_string(), json!(region_weights));
     }
     println!("{}", json!({ "meta": meta }).to_string());
-    multi_chain(&graph, &partition, writer, &params, n_threads, batch_size);
+    multi_chain(&graph, &partition, writer_str, &params, n_threads, batch_size, st_counts, cut_edges_count);
 }

@@ -14,8 +14,9 @@ use super::{
 use crate::buffers::{SpanningTreeBuffer, SplitBuffer, SubgraphBuffer};
 use crate::graph::Graph;
 use crate::partition::Partition;
+use crate::stats::{JSONLWriter, PcompressWriter, StatsWriter, TSVWriter, AssignmentsOnlyWriter};
 use crate::spanning_tree::{RMSTSampler, RegionAwareSampler, SpanningTreeSampler, USTSampler};
-use crate::stats::{SelfLoopCounts, SelfLoopReason, StatsWriter};
+use crate::stats::{SelfLoopCounts, SelfLoopReason};
 use crossbeam::scope;
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use rand::rngs::SmallRng;
@@ -60,9 +61,22 @@ struct StepPacket {
 fn start_stats_thread(
     graph: Graph,
     mut partition: Partition,
-    mut writer: Box<dyn StatsWriter>,
+    writer_str: &str,
     recv: Receiver<StepPacket>,
+    st_counts: bool,
+    cut_edges_count: bool
 ) {
+    let stdout = std::io::stdout();
+    let mut writerbuf = std::io::BufWriter::with_capacity(usize::pow(2, 14), stdout.lock());
+    let mut writer: Box<dyn StatsWriter> = match writer_str {
+        "tsv" => Box::new(TSVWriter::new()),
+        "jsonl" => Box::new(JSONLWriter::new(&mut writerbuf, false, st_counts, cut_edges_count)),
+        "pcompress" => Box::new(PcompressWriter::new()),
+        "jsonl-full" => Box::new(JSONLWriter::new(&mut writerbuf, true, st_counts, cut_edges_count)),
+        "assignments-only" => Box::new(AssignmentsOnlyWriter::new()),
+        bad => panic!("Parameter error: invalid writer '{}'", bad),
+    };
+
     writer.init(&graph, &partition).unwrap();
     let mut next: StepPacket = recv.recv().unwrap();
     while !next.terminate {
@@ -281,10 +295,12 @@ fn stop_job_thread(send: &Sender<JobPacket>) {
 pub fn multi_chain(
     graph: &Graph,
     partition: &Partition,
-    writer: Box<dyn StatsWriter>,
+    writer_str: &str,
     params: &RecomParams,
     n_threads: usize,
     batch_size: usize,
+    st_counts: bool,
+    cut_edges_count: bool,
 ) {
     let mut step = 0;
     let node_ub = node_bound(&graph.pops, params.max_pop);
@@ -306,7 +322,7 @@ pub fn multi_chain(
     scope(|scope| {
         // Start stats thread.
         scope.spawn(move |_| {
-            start_stats_thread(graph.clone(), partition.clone(), writer, stats_recv);
+            start_stats_thread(graph.clone(), partition.clone(), writer_str, stats_recv, st_counts, cut_edges_count);
         });
 
         // Start job threads.
